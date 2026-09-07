@@ -496,6 +496,11 @@ class TestClipWriterStage:
     def test_write_clip_metadata_full(self):
         """Test _write_clip_metadata with full clip data."""
         self.stage.setup()
+        self.mock_clip_with_buffer.optical_flow_score = 0.8
+        self.mock_clip_with_buffer.ocr_area_ratio = 0.1
+        self.mock_clip_with_buffer.frame_caption_candidates = ["Candidate caption"]
+        self.mock_clip_with_buffer.frame_caption = "Candidate caption"
+        self.mock_clip_with_buffer.camera_motion_labels = ["pan"]
 
         with (
             patch.object(self.stage, "_write_json_data") as mock_write_json,
@@ -526,6 +531,11 @@ class TestClipWriterStage:
             assert data["motion_score"]["global_mean"] == 0.5
             assert data["motion_score"]["per_patch_min_256"] == 0.3
             assert data["aesthetic_score"] == 0.7
+            assert data["optical_flow_score"] == 0.8
+            assert data["ocr_area_ratio"] == 0.1
+            assert data["frame_caption_candidates"] == ["Candidate caption"]
+            assert data["frame_caption"] == "Candidate caption"
+            assert data["camera_motion_labels"] == ["pan"]
             assert data["valid"] is True
             assert len(data["windows"]) == 2
 

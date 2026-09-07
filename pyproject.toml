@@ -247,6 +247,17 @@ video_cuda12 = [
     "torchaudio",
 ]
 
+# Data-Juicer-compatible video analysis stages. Kept separate from [all]
+# because OCR and scene detection add optional model and OpenCV dependencies.
+video_analysis = [
+    "nemo_curator[cuda12]",
+    "nemo_curator[cv2]",
+    "nemo_curator[video_cpu]",
+    "easyocr==1.7.1",
+    "scenedetect==0.6.7.1",
+    "simple-aesthetics-predictor==0.1.2",
+]
+
 # NVDEC HW decode; opt-in, kept off `all` (wheel vendors CVE ffmpeg). CPU-decode fallback exists.
 video_media = [
     "nemo_curator[video_cuda12]",
@@ -444,6 +455,8 @@ fixable = ["ALL"]
 
 [tool.ruff.lint.extend-per-file-ignores]
 "nemo_curator/__init__.py" = ["F401"]
+"nemo_curator/models/unimatch/**" = ["ALL"]  # Vendored from the upstream UniMatch implementation.
+"tests/stages/video/analysis/**" = ["ANN001", "ANN202"]
 "examples/**" = [
     "INP001", # no __init__.py is required
 ]

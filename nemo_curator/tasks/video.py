@@ -87,11 +87,17 @@ class Clip:
     motion_score_per_patch_min_256: float | None = None
     # aesthetic
     aesthetic_score: float | None = None
+    # migrated video analysis scores
+    optical_flow_score: float | None = None
+    ocr_area_ratio: float | None = None
     # embedding
     cosmos_embed1_frames: npt.NDArray[np.float32] | None = None
     cosmos_embed1_embedding: npt.NDArray[np.float32] | None = None
     # captioning
     windows: list[_Window] = field(default_factory=list)
+    frame_caption_candidates: list[str] = field(default_factory=list)
+    frame_caption: str | None = None
+    camera_motion_labels: list[str] = field(default_factory=list)
     # egomotion
     egomotion: dict[str, bytes] = field(default_factory=dict)
     # for testing
@@ -169,6 +175,8 @@ class ClipStats:
 
     num_filtered_by_motion: int = 0
     num_filtered_by_aesthetic: int = 0
+    num_filtered_by_optical_flow: int = 0
+    num_filtered_by_ocr: int = 0
     num_passed: int = 0
     num_transcoded: int = 0
     num_with_embeddings: int = 0
@@ -186,6 +194,8 @@ class ClipStats:
         """
         self.num_filtered_by_motion += other.num_filtered_by_motion
         self.num_filtered_by_aesthetic += other.num_filtered_by_aesthetic
+        self.num_filtered_by_optical_flow += other.num_filtered_by_optical_flow
+        self.num_filtered_by_ocr += other.num_filtered_by_ocr
         self.num_passed += other.num_passed
         self.num_transcoded += other.num_transcoded
         self.num_with_embeddings += other.num_with_embeddings

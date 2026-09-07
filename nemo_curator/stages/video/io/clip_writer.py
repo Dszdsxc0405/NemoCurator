@@ -131,7 +131,7 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
     ) -> None:
         write_json(data, dest, desc, source_video, verbose=self.verbose)
 
-    def process(self, task: VideoTask) -> VideoTask:
+    def process(self, task: VideoTask) -> VideoTask:  # noqa: C901
         video: Video = task.data
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             for clip in video.clips:
@@ -173,6 +173,7 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
             # clean up intermediate data
             for clip in video.clips:
                 clip.buffer = None
+                clip.extracted_frames.clear()
                 clip.cosmos_embed1_embedding = None
                 for window in clip.windows:
                     window.mp4_bytes = None
@@ -180,6 +181,9 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
                     window.caption.clear()
                     window.enhanced_caption.clear()
                     window.webp_bytes = None
+            for clip in video.filtered_clips:
+                clip.buffer = None
+                clip.extracted_frames.clear()
 
         if self.verbose:
             logger.info(f"Video {video.input_path} has {len(video.clips)} clips and wrote to {self.output_path}")
@@ -316,7 +320,9 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
 
         return clip_stats
 
-    def _write_clip_metadata(self, clip: Clip, video_metadata: VideoMetadata, *, filtered: bool = False) -> ClipStats:  # noqa: C901
+    def _write_clip_metadata(  # noqa: C901, PLR0912
+        self, clip: Clip, video_metadata: VideoMetadata, *, filtered: bool = False
+    ) -> ClipStats:
         clip_stats = ClipStats()
         data: dict[str, Any] = {
             "span_uuid": str(clip.uuid),
@@ -343,6 +349,16 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
             }
         if clip.aesthetic_score is not None:
             data["aesthetic_score"] = clip.aesthetic_score
+        if clip.optical_flow_score is not None:
+            data["optical_flow_score"] = clip.optical_flow_score
+        if clip.ocr_area_ratio is not None:
+            data["ocr_area_ratio"] = clip.ocr_area_ratio
+        if clip.frame_caption_candidates:
+            data["frame_caption_candidates"] = clip.frame_caption_candidates
+        if clip.frame_caption is not None:
+            data["frame_caption"] = clip.frame_caption
+        if clip.camera_motion_labels:
+            data["camera_motion_labels"] = clip.camera_motion_labels
         if len(clip.errors) > 0:
             data["errors"] = list(clip.errors)
         has_caption = False
@@ -360,7 +376,9 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
                 if model in window.enhanced_caption:
                     curr_window[f"{model}_enhanced_caption"] = window.enhanced_caption[model]
             data["windows"].append(curr_window)
-        data["valid"] = bool(clip.buffer and len(clip.windows) > 0)
+        has_caption = has_caption or clip.frame_caption is not None
+        has_caption_input = bool(clip.windows) or clip.frame_caption is not None
+        data["valid"] = bool(clip.buffer) and not filtered and (has_caption_input or not self.generate_captions)
         dest = self._get_clip_uri(clip.uuid, self.get_output_path_metas(self.output_path, "v0"), "json")
         if not self.dry_run:
             self._write_json_data(data, dest, f"metadata {clip.uuid}", clip.source_video)
@@ -396,6 +414,8 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
             "clip_chunk_index": video.clip_chunk_index,
             "num_clips_filtered_by_motion": video.clip_stats.num_filtered_by_motion,
             "num_clips_filtered_by_aesthetic": video.clip_stats.num_filtered_by_aesthetic,
+            "num_clips_filtered_by_optical_flow": video.clip_stats.num_filtered_by_optical_flow,
+            "num_clips_filtered_by_ocr": video.clip_stats.num_filtered_by_ocr,
             "num_clips_passed": video.clip_stats.num_passed,
             "num_clips_transcoded": video.clip_stats.num_transcoded,
             "num_clips_with_embeddings": video.clip_stats.num_with_embeddings,

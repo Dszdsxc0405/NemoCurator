@@ -241,6 +241,8 @@ class TestClipStats:
 
         assert stats.num_filtered_by_motion == 0
         assert stats.num_filtered_by_aesthetic == 0
+        assert stats.num_filtered_by_optical_flow == 0
+        assert stats.num_filtered_by_ocr == 0
         assert stats.num_passed == 0
         assert stats.num_transcoded == 0
         assert stats.num_with_embeddings == 0
@@ -278,6 +280,8 @@ class TestClipStats:
         stats1 = ClipStats(
             num_filtered_by_motion=5,
             num_filtered_by_aesthetic=3,
+            num_filtered_by_optical_flow=4,
+            num_filtered_by_ocr=2,
             num_passed=10,
             num_transcoded=8,
             num_with_embeddings=7,
@@ -290,6 +294,8 @@ class TestClipStats:
         stats2 = ClipStats(
             num_filtered_by_motion=2,
             num_filtered_by_aesthetic=1,
+            num_filtered_by_optical_flow=3,
+            num_filtered_by_ocr=1,
             num_passed=5,
             num_transcoded=4,
             num_with_embeddings=3,
@@ -303,6 +309,8 @@ class TestClipStats:
 
         assert stats1.num_filtered_by_motion == 7
         assert stats1.num_filtered_by_aesthetic == 4
+        assert stats1.num_filtered_by_optical_flow == 7
+        assert stats1.num_filtered_by_ocr == 3
         assert stats1.num_passed == 15
         assert stats1.num_transcoded == 12
         assert stats1.num_with_embeddings == 10
