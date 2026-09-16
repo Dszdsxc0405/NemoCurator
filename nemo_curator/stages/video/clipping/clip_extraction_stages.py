@@ -30,7 +30,7 @@ from nemo_curator.tasks.video import Clip, Video, VideoTask
 from nemo_curator.utils import grouping
 from nemo_curator.utils.operation_utils import make_pipeline_temporary_dir
 
-SUPPORTED_ENCODERS = ("h264_nvenc", "libvpx-vp9", "libopenh264")
+SUPPORTED_ENCODERS = ("h264_nvenc", "libvpx-vp9", "libopenh264", "libx264")
 
 _BYO_H264_DOCS_URL = (
     "https://github.com/NVIDIA-NeMo/Curator/blob/main/fern/versions/main/pages/get-started/installation.mdx"
@@ -53,6 +53,8 @@ class ClipTranscodingStage(ProcessingStage[VideoTask, VideoTask]):
       FFmpeg build for licensing reasons; users must install it themselves.
       The stage probes for it at setup time and raises a clear error pointing
       to the docs if it is not available.
+    - ``libx264`` — H.264 software encoder for environments that provide an
+      FFmpeg build with libx264 support.
 
     Args:
         num_cpus_per_worker: Number of CPUs per worker for Xenna scheduling. Does not affect Ray Data CPU scheduling; use ray_data_num_cpus for that.
@@ -99,8 +101,8 @@ class ClipTranscodingStage(ProcessingStage[VideoTask, VideoTask]):
         if self.encoder not in SUPPORTED_ENCODERS:
             error_msg = f"Expected encoder in {SUPPORTED_ENCODERS}. Got {self.encoder}"
             raise ValueError(error_msg)
-        if self.encoder == "libvpx-vp9" and self.use_hwaccel:
-            error_msg = "use_hwaccel is not supported with libvpx-vp9 (CPU encoder)"
+        if self.encoder != "h264_nvenc" and self.use_hwaccel:
+            error_msg = f"use_hwaccel is not supported with {self.encoder} (CPU encoder)"
             raise ValueError(error_msg)
         if self.encoder == "libopenh264":
             self._verify_libopenh264_available()
@@ -337,6 +339,8 @@ class ClipTranscodingStage(ProcessingStage[VideoTask, VideoTask]):
             self._add_nvenc_options(command, force_pix_fmt)
         elif self.encoder == "libvpx-vp9":
             self._add_libvpx_vp9_options(command, use_bit_rate, force_pix_fmt)
+        elif self.encoder == "libx264":
+            self._add_libx264_options(command)
 
     def _add_nvenc_options(self, command: list[str], force_pix_fmt: bool) -> None:
         """Add NVENC-specific encoding options."""
@@ -383,6 +387,10 @@ class ClipTranscodingStage(ProcessingStage[VideoTask, VideoTask]):
 
         if force_pix_fmt:
             command.extend(["-pix_fmt", "yuv420p"])
+
+    @staticmethod
+    def _add_libx264_options(command: list[str]) -> None:
+        command.extend(["-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"])
 
     def _add_output_options(self, command: list[str], clip: Clip, index: int) -> None:
         """Add output options to command."""

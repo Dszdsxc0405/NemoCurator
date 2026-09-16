@@ -8,6 +8,10 @@ __pycache__/
 *.so
 *.c
 
+
+tutorials/video/dataset/
+tutorials/video/logs
+
 # Distribution / packaging
 .Python
 build/

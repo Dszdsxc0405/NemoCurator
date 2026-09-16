@@ -7,6 +7,7 @@ from .frame_sampling import ClipFrameSamplingStage
 from .ocr import VideoOcrAreaRatioFilterStage
 from .optical_flow import VideoOpticalFlowFilterStage
 from .scene_split import VideoSceneSplitStage
+from .whole_video import WholeVideoClipStage
 
 __all__ = [
     "ClipFrameSamplingStage",
@@ -16,4 +17,5 @@ __all__ = [
     "VideoOcrAreaRatioFilterStage",
     "VideoOpticalFlowFilterStage",
     "VideoSceneSplitStage",
+    "WholeVideoClipStage",
 ]

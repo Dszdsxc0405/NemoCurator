@@ -51,6 +51,7 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
     enhanced_caption_models: list[str] | None = None
     verbose: bool = False
     max_workers: int = 6
+    use_pyav_metadata: bool = False
     log_stats: bool = False
     name: str = "clip_writer"
 
@@ -339,7 +340,7 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
                 ),
             ),
         }
-        clip_metadata = clip.extract_metadata()
+        clip_metadata = self._extract_clip_metadata(clip)
         if clip_metadata:
             data.update(clip_metadata)
         if clip.motion_score_global_mean is not None:
@@ -361,6 +362,7 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
             data["camera_motion_labels"] = clip.camera_motion_labels
         if len(clip.errors) > 0:
             data["errors"] = list(clip.errors)
+            data["error_details"] = dict(clip.errors)
         has_caption = False
         data["windows"] = []
         for window in clip.windows:
@@ -387,6 +389,31 @@ class ClipWriterStage(ProcessingStage[VideoTask, VideoTask]):
         clip_stats.total_clip_duration += clip_duration
         clip_stats.max_clip_duration = max(clip_stats.max_clip_duration, clip_duration)
         return clip_stats
+
+    def _extract_clip_metadata(self, clip: Clip) -> dict[str, Any] | None:
+        if not self.use_pyav_metadata or clip.buffer is None:
+            return clip.extract_metadata()
+        try:
+            import av
+
+            with av.open(io.BytesIO(clip.buffer)) as container:
+                stream = container.streams.video[0]
+                if stream.average_rate is None or stream.duration is None or stream.time_base is None:
+                    return clip.extract_metadata()
+                fps = float(stream.average_rate)
+                # Match ffprobe's six-decimal duration before applying Curator's frame-count formula.
+                duration = float(f"{float(stream.duration * stream.time_base):.6f}")
+                return {
+                    "width": stream.width,
+                    "height": stream.height,
+                    "framerate": fps,
+                    "num_frames": int(duration * fps),
+                    "video_codec": stream.codec_context.name,
+                    "num_bytes": len(clip.buffer),
+                }
+        except Exception:  # noqa: BLE001
+            # Preserve ffprobe support for containers/codecs the optional PyAV backend cannot inspect.
+            return clip.extract_metadata()
 
     def _write_video_metadata(self, video: Video) -> None:
         input_video_path = video.input_video.as_posix()

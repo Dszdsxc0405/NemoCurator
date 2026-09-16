@@ -112,6 +112,18 @@ class TestClipTranscodingStage:
         # Should not raise
         stage.setup()
 
+    def test_setup_libx264_valid(self) -> None:
+        """Test setup accepts libx264 as a valid encoder."""
+        stage = ClipTranscodingStage(encoder="libx264", use_hwaccel=False)
+        stage.setup()
+
+    def test_setup_libx264_with_hwaccel_raises(self) -> None:
+        """Test setup rejects libx264 combined with use_hwaccel=True."""
+        stage = ClipTranscodingStage(encoder="libx264", use_hwaccel=True)
+
+        with pytest.raises(ValueError, match="use_hwaccel is not supported with libx264"):
+            stage.setup()
+
     def test_setup_libvpx_vp9_with_hwaccel_raises(self) -> None:
         """Test setup rejects libvpx-vp9 combined with use_hwaccel=True."""
         stage = ClipTranscodingStage(encoder="libvpx-vp9", use_hwaccel=True)
@@ -363,6 +375,12 @@ class TestClipTranscodingStage:
         assert stage.resources.cpus == 8.0
         assert stage.resources.gpus == 0
 
+    def test_resources_libx264_uses_cpu(self) -> None:
+        """Test that libx264 allocates CPU resources, not GPU."""
+        stage = ClipTranscodingStage(encoder="libx264", use_hwaccel=False, num_cpus_per_worker=2.0)
+        assert stage.resources.cpus == 2.0
+        assert stage.resources.gpus == 0
+
     def test_add_hwaccel_options_libvpx_vp9_ignored(self) -> None:
         """Test that hwaccel options are not added for libvpx-vp9 even if requested."""
         command: list[str] = []
@@ -454,6 +472,15 @@ class TestClipTranscodingStage:
 
         assert "-pix_fmt" in command
         assert "yuv420p" in command
+
+    def test_add_video_encoding_options_libx264(self) -> None:
+        """Test that libx264 matches the Data-Juicer encoding profile."""
+        stage = ClipTranscodingStage(encoder="libx264", use_hwaccel=False)
+        command: list[str] = []
+
+        stage._add_video_encoding_options(command, None, False)
+
+        assert command == ["-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"]
 
     def test_add_output_options(self) -> None:
         """Test adding output options to FFmpeg command."""

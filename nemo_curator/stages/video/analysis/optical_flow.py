@@ -75,7 +75,12 @@ class VideoOpticalFlowFilterStage(ProcessingStage[VideoTask, VideoTask]):
     def process(self, task: VideoTask) -> VideoTask:
         return self.process_batch([task])[0]
 
-    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
+    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
+        for batch in chunks(tasks, self.batch_size):
+            self._process_video_batch(batch)
+        return tasks
+
+    def _process_video_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
         entries = active_clips(tasks)
         failed: set[int] = set()
         errors: dict[int, str] = {}
@@ -90,7 +95,8 @@ class VideoOpticalFlowFilterStage(ProcessingStage[VideoTask, VideoTask]):
             pairs.extend(
                 (task, clip, frames[index], frames[index + 1]) for index in range(0, len(frames) - 1, self.stride)
             )
-        for batch in chunks(pairs, self.batch_size):
+        if pairs:
+            batch = pairs
             try:
                 batch_scores = self._infer_pairs([(first, second) for _, _, first, second in batch])
                 for (task, clip, _, _), score in zip(batch, batch_scores, strict=True):

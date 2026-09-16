@@ -58,7 +58,7 @@ To use NeMo Curator's video curation capabilities, ensure your system meets thes
 #### Software Dependencies
 * **FFmpeg 8.0+** with one of the following encoders:
   - GPU encoder: `h264_nvenc` (recommended for performance; requires an NVENC-equipped GPU — note that A100 and H100 do **not** include NVENC)
-  - CPU encoder: `libvpx-vp9` (for non-NVENC GPUs; produces VP9 in `.mp4`)
+  - CPU encoders: `libvpx-vp9`, or user-provided `libopenh264`/`libx264`
 
 <Tip>
 If `uv` is not installed, refer to the [Installation Guide](/get-started/installation) for setup instructions, or install it quickly with:
@@ -143,7 +143,7 @@ Confirm that `FFmpeg` is on your `PATH` and that the expected video encoders are
 
 ```bash
 ffmpeg -hide_banner -version | head -n 5
-ffmpeg -encoders | grep -E "h264_nvenc|libvpx-vp9|libopenh264" | cat
+ffmpeg -encoders | grep -E "h264_nvenc|libvpx-vp9|libopenh264|libx264" | cat
 ```
 
 If encoders are missing, reinstall `FFmpeg` with the required options or use the Debian/Ubuntu script above.
@@ -155,7 +155,7 @@ If encoders are missing, reinstall `FFmpeg` with the required options or use the
 Refer to [Clip Encoding](/curate-video/process-data/transcoding) to choose encoders and verify NVENC support on your system.
 
 <Note>
-On GPUs without NVENC hardware, such as A100 and H100, use `--transcode-encoder libvpx-vp9` or install software H.264 support and use `--transcode-encoder libopenh264`.
+On GPUs without NVENC hardware, such as A100 and H100, use `--transcode-encoder libvpx-vp9` or provide an FFmpeg build with `libopenh264` or `libx264` for software H.264 encoding.
 </Note>
 
 ### Available Models
@@ -266,7 +266,7 @@ python tutorials/video/getting-started/video_split_clip_example.py \
 | **Embedding** |
 | `--embedding-algorithm` | `cosmos-embed1-224p`, `cosmos-embed1-336p`, `cosmos-embed1-448p` | Embedding model to use |
 | **Encoding** |
-| `--transcode-encoder` | `h264_nvenc`, `libvpx-vp9`, `libopenh264` | Video encoder for output clips. Use `libvpx-vp9` (CPU) on GPUs without NVENC such as A100/H100. `libopenh264` is accepted but requires a user-installed FFmpeg build — see [BYO H.264](../admin/installation.md#bring-your-own-h264-software-encoder-advanced). |
+| `--transcode-encoder` | `h264_nvenc`, `libvpx-vp9`, `libopenh264`, `libx264` | Video encoder for output clips. Use a CPU encoder on GPUs without NVENC such as A100/H100. `libopenh264` and `libx264` require a user-installed FFmpeg build — see [BYO H.264](../admin/installation.md#bring-your-own-h264-software-encoder-advanced). |
 | `--transcode-use-hwaccel` | Flag | Enable hardware acceleration for encoding (only valid with `h264_nvenc`). |
 | **Optional Features** |
 | `--generate-captions` | Flag | Generate text captions for each clip |

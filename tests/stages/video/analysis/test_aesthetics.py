@@ -1,3 +1,5 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+
 from types import SimpleNamespace
 
 import numpy as np
@@ -23,7 +25,7 @@ class _Model:
 def test_aesthetics_averages_frame_scores(video_task):
     clip = video_task.data.clips[0]
     clip.extracted_frames[UNIFORM_3_FRAMES] = np.zeros((3, 2, 2, 3), dtype=np.uint8)
-    stage = VideoAestheticsFilterStage(hf_scorer_model="predictor-v2-linear")
+    stage = VideoAestheticsFilterStage(hf_scorer_model="predictor-v2-linear", batch_size=1)
     stage._torch = torch
     stage._model = _Model()
     stage._processor = lambda **_kwargs: _Inputs()

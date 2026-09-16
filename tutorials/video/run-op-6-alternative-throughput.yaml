@@ -1,0 +1,196 @@
+ray:
+  num_cpus: 96
+  num_gpus: 4
+
+dataset:
+  input_manifest: /team/xyq/data_juicer/repos/NemoCurator/tutorials/video/dataset/T2V-5k-filter.jsonl
+
+always_stages:
+  - input_partition
+  - video_reader
+  - clip_writer
+
+# Shared stages can belong to multiple operators and are inserted only once.
+operators:
+  video_split_by_scene_mapper:
+    - video_scene_split
+    - clip_transcoding
+  video_aesthetics_filter:
+    - uniform_3_frame_sampling
+    - video_aesthetics_filter
+  video_optical_flow_filter:
+    - uniform_3_frame_sampling
+    - video_optical_flow_filter
+  video_ocr_area_ratio_filter:
+    - uniform_3_frame_sampling
+    - video_ocr_area_ratio_filter
+  video_captioning_from_frames_mapper:
+    - all_keyframe_sampling
+    - video_captioning_from_frames
+  video_captioning_camera_motion_mapper:
+    - uniform_16_frame_sampling
+    - video_captioning_camera_motion
+
+stage_order:
+  - input_partition
+  - video_reader
+  - video_scene_split
+  - clip_transcoding
+  - uniform_3_frame_sampling
+  - video_aesthetics_filter
+  - video_optical_flow_filter
+  - video_ocr_area_ratio_filter
+  - all_keyframe_sampling
+  - video_captioning_from_frames
+  - uniform_16_frame_sampling
+  - video_captioning_camera_motion
+  - clip_writer
+
+stages:
+  input_partition:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 1
+  video_reader:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 12
+  video_scene_split:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 10
+    params:
+      reuse_detector_process: true
+      detector: ContentDetector
+      threshold: 27.0
+      min_scene_len: 10
+      show_progress: false
+      max_scene_num: 3
+      meta_time_out: 60
+  clip_transcoding:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 24
+    params:
+      num_cpus_per_worker: 1.0
+      encoder: libx264
+      encoder_threads: 1
+      encode_batch_size: 3
+  uniform_3_frame_sampling:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 6
+    params:
+      sampling_method: uniform
+      frame_count: 3
+  video_aesthetics_filter:
+    cpus: 1
+    gpus: 0.05
+    batch_size: 8
+    num_workers: 5
+    params:
+      hf_scorer_model: /team/xyq/data_juicer/models/shunk031/aesthetics-predictor-v2-sac-logos-ava1-l14-linearMSE
+      min_score: 0.4
+      max_score: 1.0
+      frame_sampling_method: uniform
+      frame_num: 3
+      reduce_mode: avg
+      any_or_all: any
+  video_optical_flow_filter:
+    cpus: 2
+    gpus: 0.30
+    batch_size: 4
+    num_workers: 3
+    params:
+      optflow_model_path: /team/xyq/data_juicer/models/Unimatch/gmflow-scale2-regrefine6-mixdata-train320x576-4e7b215d.pth
+      min_score: 0.15
+      max_score: 20.0
+      frame_sampling_method: uniform
+      frame_num: 3
+      reduce_mode: avg
+      any_or_all: any
+      stride: 2
+      scale_by_fps: true
+  video_ocr_area_ratio_filter:
+    cpus: 2
+    gpus: 0.25
+    batch_size: 2
+    num_workers: 3
+    params:
+      model_storage_dir: /team/xyq/data_juicer/models/Ceceliachenen/easyocr
+      min_area_ratio: 0.001
+      max_area_ratio: 1.0
+      frame_sample_num: 3
+      languages_to_detect:
+        - ch_sim
+        - en
+      any_or_all: all
+  all_keyframe_sampling:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 3
+    params:
+      sampling_method: all_keyframes
+      frame_count: 3
+  video_captioning_from_frames:
+    cpus: 2
+    gpus: 0.45
+    batch_size: 10
+    num_workers: 3
+    params:
+      hf_img2seq: /team/xyq/data_juicer/models/Salesforce/blip2-opt-2.7b
+      caption_num: 1
+      keep_candidate_mode: random_any
+      keep_original_sample: false
+      prompt: null
+      prompt_key: null
+      frame_sampling_method: all_keyframes
+      frame_num: 3
+      horizontal_flip: false
+      vertical_flip: false
+  uniform_16_frame_sampling:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 4
+    params:
+      sampling_method: uniform
+      frame_count: 16
+  video_captioning_camera_motion:
+    cpus: 1
+    gpus: 0.05
+    batch_size: 6
+    num_workers: 4
+    params:
+      hf_model_path: /team/xyq/data_juicer/models/MCG-NJU/videomae-large
+      num_frames: 16
+      max_duration: 8
+      torch_dtype: bfloat16
+  clip_writer:
+    cpus: 1
+    gpus: 0
+    batch_size: 4
+    num_workers: 2
+    params:
+      use_pyav_metadata: true
+      generate_embeddings: false
+      generate_previews: false
+      generate_captions: true
+      caption_models: []
+      enhanced_caption_models: []
+
+experiments:
+  6op:
+    operators:
+      - video_split_by_scene_mapper
+      - video_aesthetics_filter
+      - video_optical_flow_filter
+      - video_ocr_area_ratio_filter
+      - video_captioning_from_frames_mapper
+      - video_captioning_camera_motion_mapper

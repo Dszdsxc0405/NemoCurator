@@ -70,6 +70,11 @@ class VideoCameraMotionStage(ProcessingStage[VideoTask, VideoTask]):
         return self.process_batch([task])[0]
 
     def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
+        for batch in chunks(tasks, self.batch_size):
+            self._process_video_batch(batch)
+        return tasks
+
+    def _process_video_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
         entries = active_clips(tasks)
         valid = []
         failed: set[int] = set()
@@ -81,7 +86,8 @@ class VideoCameraMotionStage(ProcessingStage[VideoTask, VideoTask]):
                 clip.errors[self.name] = "insufficient_frames"
                 continue
             valid.append((clip, frames[: self.num_frames]))
-        for batch in chunks(valid, self.batch_size):
+        if valid:
+            batch = valid
             try:
                 videos = [list(frames) for _, frames in batch]
                 inputs = self._processor(videos, return_tensors="pt")

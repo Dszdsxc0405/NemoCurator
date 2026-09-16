@@ -72,7 +72,12 @@ class VideoAestheticsFilterStage(ProcessingStage[VideoTask, VideoTask]):
     def process(self, task: VideoTask) -> VideoTask:
         return self.process_batch([task])[0]
 
-    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
+    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
+        for batch in chunks(tasks, self.batch_size):
+            self._process_video_batch(batch)
+        return tasks
+
+    def _process_video_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
         entries = active_clips(tasks)
         failed: set[int] = set()
         errors: dict[int, str] = {}
@@ -87,7 +92,8 @@ class VideoAestheticsFilterStage(ProcessingStage[VideoTask, VideoTask]):
                 flat.extend((clip, frame) for frame in frames)
         from PIL import Image
 
-        for batch in chunks(flat, self.batch_size):
+        if flat:
+            batch = flat
             try:
                 images = [Image.fromarray(frame) for _, frame in batch]
                 inputs = self._processor(images=images, return_tensors="pt").to(self._model.device)

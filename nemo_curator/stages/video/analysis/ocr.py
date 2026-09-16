@@ -1,5 +1,6 @@
 # Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -9,7 +10,7 @@ from nemo_curator.stages.base import ProcessingStage
 from nemo_curator.stages.resources import Resources
 from nemo_curator.tasks.video import Clip, VideoTask
 
-from ._utils import UNIFORM_3_FRAMES, active_clips, filter_failed_clips
+from ._utils import UNIFORM_3_FRAMES, active_clips, chunks, filter_failed_clips
 
 
 def triangle_area(p1: list[float], p2: list[float], p3: list[float]) -> float:
@@ -62,19 +63,45 @@ class VideoOcrAreaRatioFilterStage(ProcessingStage[VideoTask, VideoTask]):
         return self.process_batch([task])[0]
 
     def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
+        for batch in chunks(tasks, self.batch_size):
+            self._process_video_batch(batch)
+        return tasks
+
+    def _process_video_batch(self, tasks: list[VideoTask]) -> None:  # noqa: C901
         failed: set[int] = set()
         errors: dict[int, str] = {}
-        for _, clip in active_clips(tasks):
-            frames = clip.extracted_frames.get(self.frame_key)
-            try:
-                self._process_clip(clip, frames)
-            except Exception as exc:  # noqa: BLE001
+        entries = active_clips(tasks)
+        groups = defaultdict(list)
+        ratios = defaultdict(list)
+        for _, clip in entries:
+            frames = clip.extracted_frames.pop(self.frame_key, None)
+            if frames is None or len(frames) == 0:
                 failed.add(id(clip))
-                errors[id(clip)] = f"{type(exc).__name__}: {exc}"
-            finally:
-                clip.extracted_frames.pop(self.frame_key, None)
+                errors[id(clip)] = f"missing frames: {self.frame_key}"
+                continue
+            for frame in frames:
+                groups[frame.shape].append((clip, frame))
+        # EasyOCR uses one resize ratio per batch; grouping dimensions preserves box coordinates.
+        for group in groups.values():
+            try:
+                images = np.stack([frame for _, frame in group])
+                horizontal, free = self._reader.detect(images, reformat=False)
+                for (clip, frame), boxes, polygons in zip(group, horizontal, free, strict=True):
+                    ratios[id(clip)].append(self._box_ratio(frame.shape[:2], boxes, polygons))
+            except Exception as exc:  # noqa: BLE001
+                for clip, _ in group:
+                    failed.add(id(clip))
+                    errors[id(clip)] = f"{type(exc).__name__}: {exc}"
+        for _, clip in entries:
+            if id(clip) in failed:
+                continue
+            clip.ocr_area_ratio = float(np.mean(ratios[id(clip)]))
+            if not self.min_area_ratio <= clip.ocr_area_ratio <= self.max_area_ratio:
+                failed.add(id(clip))
+                errors[id(clip)] = (
+                    f"ratio {clip.ocr_area_ratio} outside [{self.min_area_ratio}, {self.max_area_ratio}]"
+                )
         filter_failed_clips(tasks, failed, self.name, lambda clip: errors[id(clip)], "num_filtered_by_ocr")
-        return tasks
 
     def _process_clip(self, clip: Clip, frames: np.ndarray | None) -> None:
         if frames is None or len(frames) == 0:
@@ -88,14 +115,16 @@ class VideoOcrAreaRatioFilterStage(ProcessingStage[VideoTask, VideoTask]):
 
     def _frame_ratio(self, frame: np.ndarray) -> float:
         horizontal_lists, free_lists = self._reader.detect(frame)
-        height, width = frame.shape[:2]
+        return self._box_ratio(frame.shape[:2], horizontal_lists[0], free_lists[0])
+
+    @staticmethod
+    def _box_ratio(shape: tuple[int, int], boxes: list, polygons: list) -> float:
+        height, width = shape
         rectangle_area = sum(
-            (xmax - xmin) * (ymax - ymin)
-            for xmin, xmax, ymin, ymax in horizontal_lists[0]
-            if xmax >= xmin and ymax >= ymin
+            (xmax - xmin) * (ymax - ymin) for xmin, xmax, ymin, ymax in boxes if xmax >= xmin and ymax >= ymin
         )
         quadrilateral_area = 0.0
-        for points in free_lists[0]:
+        for points in polygons:
             quadrilateral_area += triangle_area(*points[:3])
             quadrilateral_area += triangle_area(*[*points[2:], points[0]])
         return float((rectangle_area + quadrilateral_area) / (width * height))

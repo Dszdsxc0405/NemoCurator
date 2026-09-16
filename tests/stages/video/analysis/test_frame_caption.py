@@ -1,3 +1,5 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+
 import numpy as np
 import torch
 
@@ -29,7 +31,7 @@ class _Model:
 def test_caption_concatenates_all_keyframes(video_task):
     clip = video_task.data.clips[0]
     clip.extracted_frames[ALL_KEYFRAMES] = np.zeros((2, 2, 2, 3), dtype=np.uint8)
-    stage = VideoFrameCaptionStage(hf_img2seq="model", caption_num=1)
+    stage = VideoFrameCaptionStage(hf_img2seq="model", caption_num=1, batch_size=1)
     stage._torch = torch
     stage._processor = _Processor()
     stage._model = _Model()

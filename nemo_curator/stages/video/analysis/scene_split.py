@@ -3,8 +3,9 @@
 import multiprocessing as mp
 import uuid
 from dataclasses import dataclass, field
+from multiprocessing.connection import Connection
 from multiprocessing.queues import Queue
-from queue import Empty
+from queue import Empty, SimpleQueue
 from typing import Any
 
 from nemo_curator.stages.base import ProcessingStage
@@ -46,6 +47,19 @@ def _detect_scenes_worker(
         queue.put(("error", f"{type(exc).__name__}: {exc}"))
 
 
+def _persistent_scene_worker(connection: Connection, config: _SceneDetectionConfig) -> None:
+    try:
+        while True:
+            path = connection.recv()
+            result = SimpleQueue()
+            _detect_scenes_worker(result, path, config)
+            connection.send(result.get())
+    except (EOFError, BrokenPipeError):
+        pass
+    finally:
+        connection.close()
+
+
 @dataclass
 class VideoSceneSplitStage(ProcessingStage[VideoTask, VideoTask]):
     """Detect scene spans while leaving clip transcoding to Curator."""
@@ -56,6 +70,7 @@ class VideoSceneSplitStage(ProcessingStage[VideoTask, VideoTask]):
     show_progress: bool = False
     max_scene_num: int = 3
     meta_time_out: int = 60
+    reuse_detector_process: bool = False
     detector_kwargs: dict[str, Any] = field(default_factory=dict)
     batch_size: int = 4
     resources: Resources = field(default_factory=lambda: Resources(cpus=1.0))
@@ -104,6 +119,8 @@ class VideoSceneSplitStage(ProcessingStage[VideoTask, VideoTask]):
         return task
 
     def _detect(self, path: str) -> tuple[list[tuple[float, float, int, int]], str | None]:
+        if self.reuse_detector_process:
+            return self._detect_reusing_process(path)
         ctx = mp.get_context("spawn")
         queue = ctx.Queue(maxsize=1)
         process = ctx.Process(
@@ -134,3 +151,44 @@ class VideoSceneSplitStage(ProcessingStage[VideoTask, VideoTask]):
         except Empty:
             return [], "scene detector returned no result"
         return (payload, None) if status == "ok" else ([], payload)
+
+    def _detect_reusing_process(self, path: str) -> tuple[list[tuple[float, float, int, int]], str | None]:
+        if getattr(self, "_detector_process", None) is None or not self._detector_process.is_alive():
+            self.teardown()
+            ctx = mp.get_context("spawn")
+            connection, child_connection = ctx.Pipe()
+            config = _SceneDetectionConfig(
+                self.detector, self.threshold, self.min_scene_len, self.detector_kwargs, self.show_progress
+            )
+            process = ctx.Process(target=_persistent_scene_worker, args=(child_connection, config), daemon=True)
+            process.start()
+            child_connection.close()
+            self._detector_connection = connection
+            self._detector_process = process
+        try:
+            self._detector_connection.send(path)
+            if not self._detector_connection.poll(self.meta_time_out):
+                # A timeout must kill the decoder; cancelling a future does not stop native decoding.
+                self.teardown()
+                return [], "timeout"
+            status, payload = self._detector_connection.recv()
+        except (OSError, EOFError) as exc:
+            self.teardown()
+            return [], f"scene detector exited: {exc}"
+        return (payload, None) if status == "ok" else ([], payload)
+
+    def teardown(self) -> None:
+        connection = getattr(self, "_detector_connection", None)
+        if connection is not None:
+            connection.close()
+            self._detector_connection = None
+        process = getattr(self, "_detector_process", None)
+        if process is not None:
+            if process.is_alive():
+                process.terminate()
+                process.join(1)
+                if process.is_alive():
+                    process.kill()
+            process.join()
+            process.close()
+            self._detector_process = None

@@ -1,0 +1,104 @@
+ray:
+  num_cpus: 96
+  num_gpus: 4
+
+dataset:
+  input_manifest: dataset/T2V-5k-filter.jsonl
+
+always_stages:
+  - input_partition
+  - video_reader
+  - clip_writer
+
+operators:
+  video_aesthetics_filter:
+    - uniform_3_frame_sampling
+    - video_aesthetics_filter
+  video_captioning_camera_motion_mapper:
+    - uniform_16_frame_sampling
+    - video_captioning_camera_motion
+
+stage_order:
+  - input_partition
+  - video_reader
+  - whole_video_clip
+  - uniform_3_frame_sampling
+  - video_aesthetics_filter
+  - uniform_16_frame_sampling
+  - video_captioning_camera_motion
+  - clip_writer
+
+stages:
+  input_partition:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 1
+  video_reader:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 3
+  whole_video_clip:
+    cpus: 0.25
+    gpus: 0
+    batch_size: 1
+    num_workers: 3
+  uniform_3_frame_sampling:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 19
+    params:
+      sampling_method: uniform
+      frame_count: 3
+  video_aesthetics_filter:
+    cpus: 1
+    gpus: 0.10
+    batch_size: 8
+    num_workers: 19
+    params:
+      hf_scorer_model: /team/xyq/data_juicer/models/shunk031/aesthetics-predictor-v2-sac-logos-ava1-l14-linearMSE
+      min_score: 0.4
+      max_score: 1.0
+      frame_sampling_method: uniform
+      frame_num: 3
+      reduce_mode: avg
+      any_or_all: any
+  uniform_16_frame_sampling:
+    cpus: 1
+    gpus: 0
+    batch_size: 1
+    num_workers: 19
+    params:
+      sampling_method: uniform
+      frame_count: 16
+  video_captioning_camera_motion:
+    cpus: 1
+    gpus: 0.10
+    batch_size: 6
+    num_workers: 19
+    params:
+      hf_model_path: /team/xyq/data_juicer/models/MCG-NJU/videomae-large
+      num_frames: 16
+      max_duration: 8
+      torch_dtype: bfloat16
+  clip_writer:
+    cpus: 1
+    gpus: 0
+    batch_size: 4
+    num_workers: 2
+    params:
+      generate_embeddings: false
+      generate_previews: false
+      generate_captions: true
+      caption_models: []
+      enhanced_caption_models: []
+
+experiments:
+  2op:
+    operators:
+      - video_aesthetics_filter
+      - video_captioning_camera_motion_mapper
+    extra_stages:
+      - whole_video_clip

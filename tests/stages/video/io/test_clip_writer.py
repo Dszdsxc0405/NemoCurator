@@ -854,6 +854,7 @@ class TestClipWriterStage:
             assert len(data["errors"]) == 2
             assert "error1" in data["errors"]
             assert "error2" in data["errors"]
+            assert data["error_details"] == clip_with_errors.errors
 
     def test_multiple_embedding_algorithms(self):
         """Test with different embedding algorithms."""
@@ -868,3 +869,27 @@ class TestClipWriterStage:
 
                 assert isinstance(result, ClipStats)
                 mock_logger.error.assert_called()
+
+    @pytest.mark.parametrize("fps", [24.0, 29.97])
+    def test_pyav_metadata_matches_ffprobe_and_falls_back(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, fps: float
+    ) -> None:
+        cv2 = pytest.importorskip("cv2")
+        av = pytest.importorskip("av")
+        path = tmp_path / "clip.mp4"
+        writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (64, 64))
+        assert writer.isOpened()
+        for _ in range(31):
+            writer.write(np.zeros((64, 64, 3), dtype=np.uint8))
+        writer.release()
+        clip = Clip(uuid=uuid.uuid4(), source_video=str(path), span=(0, 2), buffer=path.read_bytes())
+        expected = clip.extract_metadata()
+        self.stage.use_pyav_metadata = True
+        assert self.stage._extract_clip_metadata(clip) == expected
+
+        def fail_to_open(*_args, **_kwargs) -> None:
+            message = "unsupported container"
+            raise ValueError(message)
+
+        monkeypatch.setattr(av, "open", fail_to_open)
+        assert self.stage._extract_clip_metadata(clip) == expected

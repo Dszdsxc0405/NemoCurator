@@ -79,7 +79,12 @@ class VideoFrameCaptionStage(ProcessingStage[VideoTask, VideoTask]):
     def process(self, task: VideoTask) -> VideoTask:
         return self.process_batch([task])[0]
 
-    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
+    def process_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:
+        for batch in chunks(tasks, self.batch_size):
+            self._process_video_batch(batch)
+        return tasks
+
+    def _process_video_batch(self, tasks: list[VideoTask]) -> list[VideoTask]:  # noqa: C901
         entries = active_clips(tasks)
         flat: list[tuple[Clip, int, np.ndarray]] = []
         failed: set[int] = set()
@@ -95,7 +100,8 @@ class VideoFrameCaptionStage(ProcessingStage[VideoTask, VideoTask]):
             flat.extend((clip, index, frame) for index, frame in enumerate(frames))
         from PIL import Image, ImageOps
 
-        for batch in chunks(flat, self.batch_size):
+        if flat:
+            batch = flat
             try:
                 images = [Image.fromarray(frame) for _, _, frame in batch]
                 if self.horizontal_flip:

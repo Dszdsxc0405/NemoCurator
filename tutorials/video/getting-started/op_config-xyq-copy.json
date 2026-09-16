@@ -1,0 +1,90 @@
+{
+    "group_cpu_0": {
+        "target_node": 0,
+        "video_split_by_scene_mapper": {
+            "batch_size": 1,
+            "replicas": 12,
+            "sm_percentage": 0
+        }
+    },
+    "group_cpu_1": {
+        "target_node": 1,
+        "video_split_by_scene_mapper": {
+            "batch_size": 1,
+            "replicas": 12,
+            "sm_percentage": 0
+        }
+    },
+    "group_0": {
+        "target_node": 0,
+        "video_captioning_from_frames_mapper": {
+            "batch_size": 10,
+            "sm_percentage": 80,
+            "cpu_required": 4
+        },
+        "video_captioning_camera_motion_mapper": {
+            "batch_size": 8,
+            "sm_percentage": 20,
+            "cpu_required": 2
+        }
+    },
+    "group_1": {
+        "target_node": 0,
+        "video_captioning_camera_motion_mapper": {
+            "batch_size": 32,
+            "sm_percentage": 15,
+            "cpu_required": 2
+        },
+        "video_ocr_area_ratio_filter": {
+            "batch_size": 32,
+            "sm_percentage": 35,
+            "cpu_required": 3
+        },
+        "video_optical_flow_filter": {
+            "batch_size": 32,
+            "sm_percentage": 35,
+            "cpu_required": 3
+        },
+        "video_aesthetics_filter": {
+            "batch_size": 40,
+            "sm_percentage": 15,
+            "cpu_required": 2
+        }
+    },
+    "group_2": {
+        "target_node": 1,
+        "video_captioning_from_frames_mapper": {
+            "batch_size": 6,
+            "sm_percentage": 50,
+            "cpu_required": 3
+        },
+        "video_optical_flow_filter": {
+            "batch_size": 8,
+            "sm_percentage": 50,
+            "cpu_required": 3
+        }
+    },
+    "group_3": {
+        "target_node": 1,
+        "video_aesthetics_filter": {
+            "batch_size": 32,
+            "sm_percentage": 15,
+            "cpu_required": 2
+        },
+        "video_ocr_area_ratio_filter": {
+            "batch_size": 18,
+            "sm_percentage": 35,
+            "cpu_required": 3
+        },
+        "video_optical_flow_filter": {
+            "batch_size": 18,
+            "sm_percentage": 30,
+            "cpu_required": 3
+        },
+        "video_captioning_from_frames_mapper": {
+            "batch_size": 4,
+            "sm_percentage": 20,
+            "cpu_required": 2
+        }
+    }
+}
